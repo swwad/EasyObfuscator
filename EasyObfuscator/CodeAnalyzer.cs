@@ -275,14 +275,36 @@ namespace EasyObfuscator
         }
 
         /// <summary>
+        /// 分析指定的單一檔案
+        /// </summary>
+        /// <param name="filePath">要分析的檔案路徑</param>
+        /// <returns>自定義識別符集合</returns>
+        public HashSet<string> AnalyzeFile(string filePath)
+        {
+            var customIdentifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (filePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
+                filePath.EndsWith(".aspx", StringComparison.OrdinalIgnoreCase))
+            {
+                var fileContent = File.ReadAllText(filePath);
+                AnalyzeCode(fileContent, customIdentifiers);
+            }
+
+            return customIdentifiers;
+        }
+
+        /// <summary>
         /// 分析代碼內容，提取自定義識別符
         /// </summary>
         /// <param name="code">代碼內容</param>
         /// <param name="customIdentifiers">自定義識別符集合</param>
         private void AnalyzeCode(string code, HashSet<string> customIdentifiers)
         {
-            // 移除註釋
-            code = Regex.Replace(code, @"(//.*?$)|(\/\*[\s\S]*?\*\/)", "", RegexOptions.Multiline);
+            // 移除多行註釋
+            code = Regex.Replace(code, @"/\*[\s\S]*?\*/", "");
+
+            // 移除單行註釋，但保留 #region 和 #endregion
+            code = Regex.Replace(code, @"(?<!#region\s|#endregion\s)//.*$", "", RegexOptions.Multiline);
 
             // 移除字符串字面量
             code = Regex.Replace(code, @"""(?:\\.|[^""\\])*""", "");
@@ -293,11 +315,16 @@ namespace EasyObfuscator
             // 移除數字字面量（包括十六進制）
             code = Regex.Replace(code, @"\b(0x[0-9a-fA-F]+|\d+(\.\d+)?([eE][+-]?\d+)?[dDfFmM]?)\b", "");
 
+            // 移除 #region 和 #endregion 行
+            code = Regex.Replace(code, @"^\s*#(region|endregion).*$", "", RegexOptions.Multiline);
+
+            // 匹配所有可能的識別符
             var matches = Regex.Matches(code, @"\b[a-zA-Z_]\w*\b");
 
             foreach (Match match in matches)
             {
                 var identifier = match.Value;
+                // 檢查識別符是否符合我們的條件
                 if (!ReservedKeywords.Contains(identifier, StringComparer.OrdinalIgnoreCase) &&
                     !IsCommonLibraryName(identifier) &&
                     !IsGenericTypeName(identifier) &&
